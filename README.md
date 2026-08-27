@@ -1,74 +1,79 @@
 # Billetto assignment
 
-A small Rails app showing how the three moving parts fit together: pulling
-events from the Billetto API, recording votes with Rails Event Store, and
-authenticating with Clerk.
-
-This is a structural sketch, not a finished product. The pieces work end to end,
-but there is no pagination, no background processing and no UI to speak of.
+Rails app that pulls events from the Billetto API, lists them, and lets signed-in
+users vote. Votes are recorded with Rails Event Store rather than as rows in a
+votes table. Auth is Clerk.
 
 ## Setup
 
-Needs PostgreSQL running locally (`brew install postgresql@16 && brew services
-start postgresql@16`). `database.yml` defaults to `localhost:5432` as your shell
-user with no password; override with `DATABASE_HOST`, `DATABASE_PORT`,
-`DATABASE_USERNAME`, `DATABASE_PASSWORD`, or point `DATABASE_URL` at it in
-production.
+You'll need PostgreSQL 16 and Ruby 3.2.6.
 
 ```bash
+brew install postgresql@16 && brew services start postgresql@16
+
 bundle install
 bin/rails db:prepare
 bin/rails billetto:import
 bin/rails server
 ```
 
-Credentials go in `bin/rails credentials:edit`:
+`database.yml` connects to `localhost:5432` as your shell user with no password.
+Override with `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`,
+`DATABASE_PASSWORD`. Production reads `DATABASE_URL`.
+
+### Credentials
+
+`config/master.key` is gitignored, so you'll need it from me before the app will
+boot. Or use your own keys with `bin/rails credentials:edit`:
 
 ```yaml
 billetto:
-  api_key: ...      # organiser dashboard -> Integrate -> Developers
+  api_key: ...      # organiser dashboard > Integrate > Developers
   api_secret: ...   # only shown once
 clerk:
   publishable_key: pk_test_...
   secret_key: sk_test_...
 ```
 
-Without Clerk keys the app still boots and the events page renders; nobody is
+Without Clerk keys the app still boots and the events page renders. Nobody is
 signed in, so nobody can vote.
+
+## Tests
 
 ```bash
 bin/rails test
 ```
 
-## How it fits together
+12 tests covering the Event model validations, the importer (mapping, dedupe on
+re-run, API failures), and the voting subscriber (counting, changing a vote,
+rebuilding from the stream).
+
+## Design notes
 
 ```
-app/services/billetto/client.rb          talks to the API
-app/services/billetto/event_importer.rb  turns payloads into Event rows
-app/models/event.rb
-app/models/vote_count.rb                 read model
+app/services/billetto/client.rb          HTTP only
+app/services/billetto/event_importer.rb  payloads -> Event rows
 app/events/                              EventUpvoted, EventDownvoted
-app/subscribers/update_vote_count.rb     keeps vote_count in step
+app/subscribers/update_vote_count.rb     projection
+app/models/vote_count.rb                 read model
 app/controllers/concerns/clerk_authentication.rb
 ```
 
 ### Billetto
 
-`Client` owns the HTTP call and nothing else. Auth is the `Api-Keypair` header —
-access key and secret joined with a colon. Faraday errors are re-raised as
-`Billetto::Client::Error`, so the importer never has to know what Faraday is.
+`Client` makes the request and nothing else. Auth is the `Api-Keypair` header:
+access key and secret joined with a colon. Faraday errors come back out as
+`Billetto::Client::Error`, so nothing above it cares which HTTP library we use.
 
-`EventImporter` maps payloads onto `Event` and upserts on `billetto_id`, which
-has a unique index. That is what makes a second run update rather than
-duplicate, and therefore what makes it safe to schedule.
+`EventImporter` upserts on `billetto_id`, which has a unique index, so running
+the import twice updates rather than duplicates. Safe to schedule.
 
-One gotcha: the live API returns `organiser` and `categorization` while the
-published docs show `organizer` and `categorisation`. The importer accepts
-either.
+The live API returns `organiser` and `categorization`. The docs say `organizer`
+and `categorisation`. The importer accepts either.
 
-### Rails Event Store
+### Voting
 
-A vote is not a row, it is an event:
+A vote gets published as a fact into a stream per event:
 
 ```ruby
 event_store.publish(
@@ -77,46 +82,58 @@ event_store.publish(
 )
 ```
 
-Payloads are stored in `jsonb` columns with the JSON serializer, so events stay
-readable in psql rather than sitting there as opaque blobs:
-
-```sql
-select event_type, data->>'user_id' from event_store_events;
-```
-
-`UpdateVoteCount` subscribes to both vote events and maintains the `vote_counts`
-table, so the page reads a counter instead of counting the stream. Because the
-counts are derived, they can be thrown away and rebuilt:
+`UpdateVoteCount` subscribes to both vote types and maintains `vote_counts`, so
+rendering reads one column instead of counting the stream. Those counts are
+derived, so they can be deleted and replayed:
 
 ```bash
 bin/rails vote_counts:rebuild
 ```
 
-Storing which way each user voted is what lets a changed vote move the count
-rather than add to it.
+`vote_counts` also stores which way each user voted, which is what lets someone
+change their mind and move the count instead of adding to it.
 
-Three RES 3 details worth knowing: events subclass `RubyEventStore::Event` (the
-`RailsEventStore::Event` alias was removed), `subscribe` needs a callable
-instance — passing the class raises `InvalidHandler` — and a handler must read
-its payload with indifferent keys. A freshly published event carries the symbol
-keys it was built with; one replayed off the stream comes back from JSON with
-string keys, so `fetch(:event_id)` works live and raises on rebuild.
+Payloads live in `jsonb` with the JSON serializer, so events stay readable:
+
+```sql
+select event_type, data->>'user_id' from event_store_events;
+```
+
+Two RES 3 things that cost me time. Events subclass `RubyEventStore::Event` (the
+`RailsEventStore::Event` alias is gone) and `subscribe` wants an instance, not
+the class. Handlers also need indifferent key access: a published event has
+symbol keys, a replayed one comes back from JSON with strings, so
+`fetch(:event_id)` works when voting and blows up on rebuild.
 
 ### Clerk
 
-Clerk's Rack middleware verifies the session and leaves a proxy in the Rack env,
-so `ClerkAuthentication` only reads `request.env["clerk"].user_id`. Sign-up and
-sign-in are Clerk's hosted pages; there are no auth controllers here.
+The Rack middleware verifies the session and leaves a proxy in the Rack env, so
+`ClerkAuthentication` just reads `request.env["clerk"].user_id`. Sign-in and
+sign-up are Clerk's hosted pages. No auth controllers and no users table; the
+only thing stored is the user id arriving on each vote event.
 
-The railtie inserts that middleware whether or not keys are configured, and then
-every request 500s, so `config/initializers/clerk.rb` inserts it instead.
+Clerk's railtie inserts the middleware whether or not keys are configured, and
+then every request 500s. `config/initializers/clerk.rb` inserts it manually,
+guarded on the keys being present.
+
+## Assumptions
+
+`/public/events` returns every public event on the platform, not the ones you
+created as an organiser; the keypair authenticates you as an API consumer. The
+import pulls 100 of roughly 1,350.
+
+Votes are last-write-wins per user and order doesn't affect the result, so
+there's no `expected_version` check. The real race is two people voting on the
+same event at once, which the projection handles with a row lock.
 
 ## Not done
 
-- Pagination. The endpoint does expose a cursor (`after=<last_id>`, alongside
-  `has_more` and `total`), so it is implementable — we cap at the max `limit` of
-  100 of the ~1350 public events on purpose, which is ample to exercise the
-  ingest, voting and display paths.
-- Background jobs. The subscriber runs synchronously; in production it would be
-  an ActiveJob handler on Sidekiq, dispatched after commit.
-- Anything beyond a plain ERB list.
+- Authentication and browser tests. The brief asks for both. Capybara and
+  Selenium are configured but no system test is written.
+- Pagination. The endpoint does have a cursor (`after`, plus `has_more` and
+  `total`), so this is a scope decision, not a limitation. One page of 100 is
+  enough to exercise ingest, voting and display.
+- Background processing. The subscriber runs synchronously in the request. In
+  production it'd be an ActiveJob handler dispatched after commit, at the cost of
+  the voter briefly seeing a stale count.
+- Any real UI. It's a plain ERB list.
