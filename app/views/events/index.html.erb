@@ -1,0 +1,40 @@
+<h1>Events</h1>
+
+<p>
+  <% if signed_in? %>
+    Signed in as <%= current_user_id %> &middot; <%= link_to "Sign out", clerk_sign_out_url %>
+  <% else %>
+    <%= link_to "Sign in", clerk_sign_in_url %> to vote.
+  <% end %>
+</p>
+
+<% if @events.empty? %>
+  <p>No events yet. Run <code>bin/rails billetto:import</code>.</p>
+<% end %>
+
+<% @events.each do |event| %>
+  <article>
+    <% if event.image_url.present? %>
+      <%= image_tag event.image_url, alt: "", width: 120 %>
+    <% end %>
+
+    <h2><%= link_to event.title, event.url %></h2>
+
+    <p>
+      <%= event.starts_at.strftime("%-d %b %Y, %H:%M") %>
+      <% if event.city.present? %> &middot; <%= event.city %><% end %>
+    </p>
+
+    <p><%= truncate(event.description, length: 200) %></p>
+
+    <p>
+      <%= event.upvotes %> up / <%= event.downvotes %> down
+
+      <% if signed_in? %>
+        <%= button_to "Upvote", event_votes_path(event, direction: "up") %>
+        <%= button_to "Downvote", event_votes_path(event, direction: "down") %>
+      <% end %>
+    </p>
+  </article>
+  <hr>
+<% end %>

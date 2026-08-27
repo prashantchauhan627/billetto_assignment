@@ -1,0 +1,33 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "1985162",
+      "title": "Comedy Værkstedet",
+      "description": "An evening of stand-up in Aarhus.",
+      "url": "https://billetto.dk/e/comedy-vaerkstedet-billetter-1985162",
+      "image_link": "https://billetto.imgix.net/example",
+      "startdate": "2026-09-24T18:00:00Z",
+      "enddate": "2026-09-24T20:00:00Z",
+      "organiser": { "id": 6058628, "name": "Aarhus Comedy Club" },
+      "categorization": { "category": "performing_arts" },
+      "location": { "city": "Aarhus C", "country_code": "DK" }
+    },
+    {
+      "id": "1984771",
+      "title": "Fællesspisning på ANKER",
+      "description": "Communal dinner in Sydhavnen.",
+      "url": "https://billetto.dk/e/faellesspisning-pa-anker-billetter-1984771",
+      "startdate": "2026-09-30T16:00:00Z",
+      "enddate": "2026-09-30T17:30:00Z",
+      "organiser": { "id": 5827766, "name": "ANKER" },
+      "categorization": { "category": "food_drink" },
+      "location": { "city": "København", "country_code": "DK" }
+    },
+    {
+      "id": "9999999",
+      "description": "No title, so the importer should skip it.",
+      "startdate": "2026-10-01T10:00:00Z"
+    }
+  ]
+}
