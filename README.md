@@ -6,7 +6,7 @@ votes table. Auth is Clerk.
 
 ## Setup
 
-You'll need PostgreSQL 16 and Ruby 3.2.6.
+You'll need PostgreSQL 16 and Ruby 3.4.7.
 
 ```bash
 brew install postgresql@16 && brew services start postgresql@16
