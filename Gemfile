@@ -38,7 +38,7 @@ gem "clerk-sdk-ruby", "~> 8.0", require: "clerk"
 # HTTP client for the Billetto API.
 gem "faraday", "~> 2.0"
 # Event sourcing / CQRS backbone.
-gem "rails_event_store", "~> 3.0"
+gem "rails_event_store", "~> 3.1"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
