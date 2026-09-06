@@ -41,12 +41,26 @@ signed in, so nobody can vote.
 ## Tests
 
 ```bash
-bin/rails test
+bin/rails test        # models, importer, subscriber, request specs
+bin/rails test:system # browser tests
+bin/rails test:all    # everything
 ```
 
-12 tests covering the Event model validations, the importer (mapping, dedupe on
-re-run, API failures), and the voting subscriber (counting, changing a vote,
-rebuilding from the stream).
+20 tests, 53 assertions:
+
+- **Model** - title and date validations, no duplicate Billetto event.
+- **Importer** - payload mapping, re-running updates instead of duplicating,
+  API failures surface as `Billetto::Client::Error`.
+- **Event store** - publishing updates the count, each user counted once,
+  changing a vote moves it, counts rebuilt from the stream match the live ones.
+- **Authorization** - a signed-out POST redirects and writes nothing to the
+  stream; a signed-in one records the vote against the user who cast it.
+- **Browser** - a guest sees a sign-in link and no vote buttons, a signed-in
+  user can vote and change their vote through the rendered pages.
+
+Clerk's middleware isn't mounted in test, since its dev handshake redirects
+every request before it reaches a controller. The signed-in user is set
+directly instead, so only the identity is stubbed and the rest runs for real.
 
 ## Design notes
 
@@ -128,8 +142,6 @@ same event at once, which the projection handles with a row lock.
 
 ## Not done
 
-- Authentication and browser tests. The brief asks for both. Capybara and
-  Selenium are configured but no system test is written.
 - Pagination. The endpoint does have a cursor (`after`, plus `has_more` and
   `total`), so this is a scope decision, not a limitation. One page of 100 is
   enough to exercise ingest, voting and display.
