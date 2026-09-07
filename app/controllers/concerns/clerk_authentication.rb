@@ -19,12 +19,10 @@ module ClerkAuthentication
     redirect_to root_path, alert: "Please sign in to vote." unless signed_in?
   end
 
-  def clerk_account_portal
-    key = Rails.application.credentials.dig(:clerk, :publishable_key).to_s
-    domain = Base64.decode64(key.split("_")[2..].join("_")).sub(/\$\z/, "")
-    "https://#{domain.sub(/\.clerk\./, '.')}"
+  def clerk_base_url
+    ENV.fetch("CLERK_BASE_URL") { Rails.application.credentials.dig(:clerk, :clerk_base_url) }
   end
 
-  def clerk_sign_in_url  = "#{clerk_account_portal}/sign-in?redirect_url=#{CGI.escape(root_url)}"
-  def clerk_sign_out_url = "#{clerk_account_portal}/sign-out?redirect_url=#{CGI.escape(root_url)}"
+  def clerk_sign_in_url  = "#{clerk_base_url}/sign-in?redirect_url=#{CGI.escape(root_url)}"
+  def clerk_sign_out_url = "#{clerk_base_url}/sign-out?redirect_url=#{CGI.escape(root_url)}"
 end

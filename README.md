@@ -33,7 +33,18 @@ billetto:
 clerk:
   publishable_key: pk_test_...
   secret_key: sk_test_...
+  clerk_base_url: https://<slug>.accounts.dev
 ```
+
+`clerk_base_url` is the Clerk account portal that hosts the sign-in and sign-up
+pages. Find it in the Clerk dashboard under Account Portal. Don't use the
+Frontend API URL shown next to the API keys, which is `<slug>.clerk.accounts.dev`
+with the extra `clerk.` label: it looks similar, but it serves no sign-in page.
+`curl -sL -o /dev/null -w "%{http_code}" <url>/sign-in` returns 200 for the right
+one.
+
+`CLERK_BASE_URL` overrides the credential when set, which is how CI and
+production point at a different Clerk instance.
 
 Without Clerk keys the app still boots and the events page renders. Nobody is
 signed in, so nobody can vote.
@@ -127,8 +138,10 @@ sign-up are Clerk's hosted pages. No auth controllers and no users table; the
 only thing stored is the user id arriving on each vote event.
 
 Clerk's railtie inserts the middleware whether or not keys are configured, and
-then every request 500s. `config/initializers/clerk.rb` inserts it manually,
-guarded on the keys being present.
+then every request 500s. `CLERK_SKIP_RAILTIE` turns that off and
+`config/initializers/clerk.rb` inserts the middleware itself, guarded on the keys
+being present. That env var is set in `config/application.rb` rather than an
+initializer, because it has to be in place before the railtie runs.
 
 ## Assumptions
 
