@@ -36,7 +36,7 @@ gem "bootsnap", require: false
 # Clerk.com authentication.
 gem "clerk-sdk-ruby", "~> 8.0", require: "clerk"
 # HTTP client for the Billetto API.
-gem "faraday", "~> 2.0"
+gem "faraday", "~> 2.15"
 # Event sourcing / CQRS backbone.
 gem "rails_event_store", "~> 3.0"
 
